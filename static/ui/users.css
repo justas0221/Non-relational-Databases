@@ -1,0 +1,55 @@
+body{
+    font-family:system-ui,Arial;
+    margin:20px
+}
+
+.grid{
+    display:grid;
+    grid-template-columns:1fr 1fr 1fr;
+    gap:8px
+}
+
+table{
+    border-collapse:collapse;
+    width:100%;
+    margin-top:10px
+}
+
+th,td{
+    border:1px solid #ddd;
+    padding:8px
+}
+
+th{
+    background:#f4f4f4;
+    text-align:left
+}
+
+input[type=text], input{
+    width:100%;
+    box-sizing:border-box
+}
+
+.controls{
+    display:flex;
+    gap:8px;
+    margin-top:8px
+}
+
+button{
+    padding:6px 10px;
+    border:1px solid #888;
+    background:#fff;
+    cursor:pointer
+}
+
+button.primary{
+    background:#0b79d0;
+    color:#fff;
+    border-color:#0b79d0
+}
+
+.meta{
+    margin-top:12px;
+    color:#666
+}

@@ -1,0 +1,47 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Event</title>
+  <link rel="stylesheet" href="/static/ui/events.css" />
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div class="brand">
+        <a href="/ui" style="text-decoration:none;color:inherit">
+          <div class="logo">Tic</div>
+        </a>
+        <div>
+          <div class="title" id="title">Event</div>
+          <div class="meta" id="subtitle" style="font-size:12px;color:var(--muted)"></div>
+        </div>
+      </div>
+      <div></div>
+    </header>
+
+    <main id="content">
+      <section id="info" class="card"></section>
+
+      <h2 style="margin-top:18px">Tickets</h2>
+      <form id="buyForm" class="card">
+        <select id="ticketsDropdown" class="ticket-dropdown" multiple aria-label="Select tickets (mobile)"></select>
+
+        <div id="tickets" class="tickets-grid"></div>
+
+        <label for="userSelect" style="display:block;margin-top:12px">Buy as user:</label>
+        <select id="userSelect" class="input" aria-label="Select user"></select>
+
+        <div class="actions" style="margin-top:12px">
+          <button type="submit" class="btn primary">Buy selected tickets</button>
+          <a href="/ui" class="btn secondary" style="text-decoration:none;margin-left:8px">Back</a>
+        </div>
+      </form>
+
+      <div class="footer">Simple demo UI — not for production</div>
+    </main>
+  </div>
+
+  <script src="/static/ui/event.js"></script>
+</body>
+</html>

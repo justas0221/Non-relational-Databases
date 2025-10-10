@@ -1,0 +1,50 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Users Admin</title>
+  <link rel="stylesheet" href="/static/ui/users.css" />
+</head>
+<body>
+  <h1>Users</h1>
+
+  <form id="createForm">
+    <div class="grid">
+      <input id="name" placeholder="Name" required />
+      <input id="email" placeholder="Email" required />
+      <input id="phoneNumber" placeholder="Phone (optional)" />
+    </div>
+    <div class="controls">
+      <button id="createBtn" type="submit">Create user</button>
+      <button id="refreshBtn" type="button">Refresh</button>
+    </div>
+  </form>
+
+  <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
+    <label>
+      Phone:
+      <select id="hasPhoneFilter">
+        <option value="">All</option>
+        <option value="with">With phone</option>
+        <option value="without">Without phone</option>
+      </select>
+    </label>
+
+    <label>
+      Search:
+      <input id="qFilter" placeholder="name or email" />
+    </label>
+
+    <button id="applyFilters">Apply</button>
+  </div>
+
+  <div id="meta" class="meta"></div>
+
+  <table id="usersTable" aria-live="polite">
+    <thead><tr><th>_id</th><th>Name</th><th>Email</th><th>Phone</th><th>Actions</th></tr></thead>
+    <tbody></tbody>
+  </table>
+
+  <script src="/static/ui/users.js"></script>
+</body>
+</html>

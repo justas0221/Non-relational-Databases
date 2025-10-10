@@ -1,5 +1,6 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from pymongo import MongoClient
+from pymongo.errors import DuplicateKeyError
 from bson import ObjectId
 from bson.int64 import Int64
 from datetime import datetime, timezone
@@ -47,6 +48,145 @@ def parse_int(name, default, min_v=1, max_v=1000):
     except Exception:
         v = default
     return v
+
+try:
+    db.users.create_index([("email", 1)], unique=True)
+except Exception:
+    pass
+
+
+@app.post("/users")
+def create_user():
+    data = request.get_json(silent=True) or {}
+    name = data.get("name")
+    email = data.get("email")
+    phone = (data.get("phoneNumber") or "").strip()
+    if not name or not email:
+        return jsonify({"error": "name and email required"}), 400
+    user = {"name": name, "email": email}
+    if phone:
+        user["phoneNumber"] = phone
+    try:
+        res = db.users.insert_one(user)
+    except DuplicateKeyError:
+        return jsonify({"error": "email already exists"}), 409
+    created = db.users.find_one({"_id": res.inserted_id})
+    return jsonify(serialize(created)), 201
+
+
+@app.get("/users")
+def list_users():
+    page = parse_int("page", 1, 1, 1_000_000)
+    limit = parse_int("limit", 20, 1, 200)
+    skip = (page - 1) * limit
+
+    q = {}
+
+    has_phone = request.args.get("hasPhone")
+    if has_phone is not None:
+        v = has_phone.lower()
+        if v in ("1", "true", "yes", "with"):
+            # phoneNumber exists and is not empty and not null
+            q["$and"] = [
+                {"phoneNumber": {"$exists": True}},
+                {"phoneNumber": {"$ne": ""}},
+                {"phoneNumber": {"$ne": None}}
+            ]
+        elif v in ("0", "false", "no", "without"):
+            # missing OR empty string OR null
+            q["$or"] = [
+                {"phoneNumber": {"$exists": False}},
+                {"phoneNumber": ""},
+                {"phoneNumber": None}
+            ]
+
+    # search q= matches name or email (case-insensitive)
+    if (s := request.args.get("q")):
+        q["$or"] = q.get("$or", []) + [
+            {"name": {"$regex": s, "$options": "i"}},
+            {"email": {"$regex": s, "$options": "i"}}
+        ]
+
+    # sorting
+    sort_field = request.args.get("sort", "name")
+    dir_ = 1 if request.args.get("dir", "asc") == "asc" else -1
+
+    # use the built query (previously code used an empty filter)
+    total = db.users.count_documents(q)
+    cursor = db.users.find(q).sort(sort_field, dir_).skip(skip).limit(limit)
+    data = [serialize(d) for d in cursor]
+    return jsonify({"data": data, "meta": {"page": page, "limit": limit, "total": total}})
+
+@app.get("/users/<user_id>")
+def get_user(user_id):
+    _id = oid(user_id)
+    if not _id:
+        return jsonify({"error": "invalid id"}), 400
+    doc = db.users.find_one({"_id": _id})
+    if not doc:
+        return jsonify({"error": "not found"}), 404
+    return jsonify(serialize(doc))
+
+
+@app.delete("/users/<user_id>")
+def delete_user(user_id):
+    _id = oid(user_id)
+    if not _id:
+        return jsonify({"error": "invalid id"}), 400
+    res = db.users.delete_one({"_id": _id})
+    if res.deleted_count == 0:
+        return jsonify({"error": "not found"}), 404
+    return jsonify({"ok": True}), 200
+
+@app.patch("/users/<user_id>")
+def update_user(user_id):
+    _id = oid(user_id)
+    if not _id:
+        return jsonify({"error": "invalid id"}), 400
+    data = request.get_json(silent=True) or {}
+    set_ops = {}
+    unset_ops = {}
+    for k in ("name", "email", "phoneNumber"):
+        if k in data:
+            if k == "phoneNumber":
+                val = data.get("phoneNumber")
+                if isinstance(val, str):
+                    val = val.strip()
+                if not val:
+                    unset_ops["phoneNumber"] = ""
+                else:
+                    set_ops["phoneNumber"] = val
+            else:
+                set_ops[k] = data[k]
+    if not set_ops and not unset_ops:
+        return jsonify({"error": "no fields to update"}), 400
+    ops = {}
+    if set_ops:
+        ops["$set"] = set_ops
+    if unset_ops:
+        ops["$unset"] = unset_ops
+    try:
+        res = db.users.find_one_and_update({"_id": _id}, ops, return_document=True)
+    except DuplicateKeyError:
+        return jsonify({"error": "email already exists"}), 409
+    if not res:
+        return jsonify({"error": "not found"}), 404
+    return jsonify(serialize(res))
+
+
+@app.get("/ui/users")
+def ui_users():
+    return app.send_static_file("ui/users.html")
+
+@app.get("/ui")
+def ui_index():
+    return app.send_static_file("ui/events.html")
+
+@app.get("/ui/event")
+def ui_event():
+    return app.send_static_file("ui/event.html")
+
+# ---------------------------------------------------------------------
 
 @app.get("/")
 def home():
@@ -320,4 +460,4 @@ def availability():
     return jsonify(data)
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, use_reloader=False)
