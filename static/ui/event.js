@@ -1,5 +1,6 @@
 // Sis skriptas ikelia ivykio informacija, bilietus ir vartotojus,
-// leidzia pasirinkti bilietus ir sukurti uzsakyma (/orders).
+// leidzia pasirinkti bilietus ir sukurti uzsakyma (/orders),
+// dabar su papildomu bilietu filtravimu pagal kaina ir vietą (pvz. GA).
 
 document.addEventListener('DOMContentLoaded', () => {
   // nuskaityti parametruose perduota eventId
@@ -14,6 +15,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const userSel = document.getElementById('userSelect');
   const form = document.getElementById('buyForm');
 
+  // Filtrų elementai
+  const filterSeat = document.getElementById('filterSeat');
+  const filterMin = document.getElementById('filterMin');
+  const filterMax = document.getElementById('filterMax');
+  const applyBtn = document.getElementById('applyFilters');
+
   if (!eventId) {
     // jei nera pasirinkto ivykio pranesimas ir nutraukimas
     if (infoEl) infoEl.textContent = 'No event selected';
@@ -23,7 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // kainos eurais
   const currencyFormatter = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'EUR' });
 
-  // pakeicia numeri i valiutos string arba grazina null jei neimanoma
+   // pakeicia numeri i valiutos string arba grazina null jei neimanoma
   function formatPrice(n) {
     if (n === null || n === undefined || isNaN(Number(n))) return null;
     return currencyFormatter.format(Number(n));
@@ -44,20 +51,19 @@ document.addEventListener('DOMContentLoaded', () => {
     return el;
   }
 
-  // Apskaiciuoja ir atnaujina uzsakymo suma pagal pazymetus bilietus ir GA kiekius
+   // Apskaiciuoja ir atnaujina uzsakymo suma pagal pazymetus bilietus ir GA kiekius
   function updateTotal() {
     const totalEl = ensureTotalElement();
     if (!totalEl) return;
     try {
       let total = 0;
       if (dropdownEl && window.getComputedStyle(dropdownEl).display !== 'none') {
-        // mobiliuju telefonu versija: bandom parsinti kaina is pasirinkimo teksto (best-effort)
+          // mobiliuju telefonu versija: bandom parsinti kaina is pasirinkimo teksto (best-effort)
         Array.from(dropdownEl.selectedOptions).forEach(opt => {
           const m = opt.textContent.match(/€\s?([0-9.,]+)/);
           if (m) total += Number(m[1].replace(',', '.'));
         });
       } else {
-        // desktop: sumuojame data-price atributus pazymetuose checkbox'uose
         const checked = Array.from(form.querySelectorAll('input[name="ticket"]:checked'));
         checked.forEach(i => {
           const p = Number(i.dataset.price || 0);
@@ -70,8 +76,7 @@ document.addEventListener('DOMContentLoaded', () => {
       totalEl.textContent = 'Order total: —';
     }
   }
-
-  // Užkrauna ivykio metaduomenis (pavadinima, data, vieta)
+ // Užkrauna ivykio metaduomenis (pavadinima, data, vieta)
   async function loadEvent() {
     try {
       let ev = null;
@@ -80,6 +85,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const rId = await fetch('/events/' + encodeURIComponent(eventId));
         if (rId.ok) ev = await rId.json();
       } catch (err) { /* ignore ir krentame i fallback */ }
+
 
       if (!ev) {
         // fallback: uzkrauname saraša ir randame pagal id
@@ -91,6 +97,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (!ev) { infoEl.textContent = 'Event not found'; return; }
       // atvaizduojame pavadinima ir data bei vieta
+
       titleEl.textContent = ev.title || 'Event';
       const when = ev.eventDate ? new Date(ev.eventDate).toLocaleString() : '';
       infoEl.innerHTML = `<div>${when}</div><div class="meta">${escapeHtml(ev.location || '')}</div>`;
@@ -102,12 +109,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Uzkrauna bilietus is serverio, rusiuoja ir atvaizduoja juos sąsajoje
-  async function loadTickets(){
+    // Uzkrauna bilietus is serverio, rusiuoja ir atvaizduoja juos sąsajoje
+  async function loadTickets() {
     try {
       ticketsEl.innerHTML = 'Loading tickets...';
       if (dropdownEl) dropdownEl.innerHTML = '';
-      const r = await fetch('/tickets?eventId=' + encodeURIComponent(eventId) + '&limit=1000');
+
+      const query = new URLSearchParams({ eventId, limit: 1000 });
+      if (filterSeat?.value) query.append('seat', filterSeat.value.trim());
+      if (filterMin?.value) query.append('minPrice', filterMin.value.trim());
+      if (filterMax?.value) query.append('maxPrice', filterMax.value.trim());
+
+      const r = await fetch('/tickets?' + query.toString());
       if (!r.ok) { ticketsEl.textContent = 'Failed to load tickets'; return; }
       const j = await r.json();
       let data = j.data || [];
@@ -120,7 +133,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      // Rusiavimas: GA pirmas, po to pagal seat arba type abeceles tvarka (su numeric-aware)
+      // Rusiavimas: GA pirmas, tada pagal seat/type
       data.sort((a, b) => {
         const aGA = Boolean(a.isGeneralAdmission || (a.type && String(a.type).toLowerCase().includes('ga')));
         const bGA = Boolean(b.isGeneralAdmission || (b.type && String(b.type).toLowerCase().includes('ga')));
@@ -132,7 +145,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // atvaizdavimas: kiekvienam bilietui sukuriamas korteles elementatas dropdown opcija
       data.forEach(t => {
-        // paruosiame kaina ir teksta
+         // paruosiame kaina ir teksta
         const priceNum = (typeof t.price === 'number') ? t.price : (isNaN(Number(t.price)) ? null : Number(t.price));
         const priceLabel = priceNum !== null ? formatPrice(priceNum) : 'Price unavailable';
 
@@ -151,6 +164,7 @@ document.addEventListener('DOMContentLoaded', () => {
                       </label>`;
         ticketsEl.appendChild(d);
 
+        
         // mobiliuju telefonu versija: prideti opciją i dropdown (su kainos tekstu)
         if (dropdownEl) {
           const opt = document.createElement('option');
@@ -174,7 +188,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Uzkrauna vartotoju sarasa i "Buy as user" select'a
-  async function loadUsers(){
+  async function loadUsers() {
     try {
       userSel.innerHTML = '<option value="">Select user</option>';
       const r = await fetch('/users?limit=1000');
@@ -193,10 +207,19 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Apdorojame formos submit: surenkame pasirinkimus ir siunciame uzsakyma i /orders
+  if (applyBtn) {
+    applyBtn.addEventListener('click', ev => {
+      ev.preventDefault();
+      loadTickets();
+    });
+  }
+
+  // Užsakymo pateikimas
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
     const userId = userSel.value;
     if (!userId) { alert('Select a user'); return; }
+
 
     // surinkti pasirinktas bilietų id vertes (mobile arba desktop)
     let checked = [];
@@ -216,7 +239,7 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const r = await fetch('/orders', {
         method: 'POST',
-        headers: {'Content-Type':'application/json'},
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
       if (r.status === 201) {
@@ -224,7 +247,7 @@ document.addEventListener('DOMContentLoaded', () => {
         location.reload();
         return;
       }
-      const text = await r.text().catch(()=>'<no body>');
+      const text = await r.text().catch(() => '<no body>');
       alert('Failed: ' + r.status + '\n' + text);
     } catch (err) {
       console.error('create order error', err);
@@ -232,7 +255,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // pradinis uzkrovimas
+  // Pradinis uzkrovimas
   loadEvent();
 });
 

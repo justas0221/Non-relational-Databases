@@ -252,23 +252,60 @@ def list_events():
 def list_tickets():
     """
     Required: eventId
-    Optional: type=GA|seat
+    Optional:
+      type=GA|seat
+      minPrice=<eur>
+      maxPrice=<eur>
+      seat=<GA or A/B/C sector or ALL>
     Sort: sort=price|seat, dir=asc|desc
     Pagination: page, limit
     """
     event_id = request.args.get("eventId")
     if not event_id:
-        return jsonify({"error":"eventId is required"}), 400
+        return jsonify({"error": "eventId is required"}), 400
     _event = oid(event_id)
     if not _event:
-        return jsonify({"error":"invalid eventId"}), 400
+        return jsonify({"error": "invalid eventId"}), 400
 
     q = {"eventId": _event}
-    if v := request.args.get("type"):
-        if v not in ("GA", "seat"):
-            return jsonify({"error":"type must be GA or seat"}), 400
-        q["type"] = v
 
+    # Type filtras
+    ttype = request.args.get("type")
+    if ttype:
+        ttype = ttype.strip()
+        if ttype not in ("GA", "seat"):
+            return jsonify({"error": "type must be GA or seat"}), 400
+        q["type"] = ttype
+
+    # Kainos filtras
+    try:
+        min_price = request.args.get("minPrice")
+        max_price = request.args.get("maxPrice")
+        if min_price or max_price:
+            q["price"] = {}
+            if min_price:
+                q["price"]["$gte"] = int(float(min_price) * 100)
+            if max_price:
+                q["price"]["$lte"] = int(float(max_price) * 100)
+    except ValueError:
+        return jsonify({"error": "invalid price filter"}), 400
+
+    # --- Seat / sektorius / GA filtras ---
+    seat = request.args.get("seat", "").strip().upper()
+    if seat and seat != "ALL":
+        if seat in ("GA", "GENERAL", "GENERAL ADMISSION"):
+            q["$or"] = [
+                {"isGeneralAdmission": True},
+                {"type": {"$regex": r"^GA$", "$options": "i"}},
+                {"seat": {"$regex": r"^GA$", "$options": "i"}},
+            ]
+        else:
+            q["$or"] = [
+                {"seat": {"$regex": f"^{seat}", "$options": "i"}},
+                {"type": {"$regex": f"^{seat}", "$options": "i"}},
+            ]
+
+    # Rikiavimas
     sort_field = request.args.get("sort", "price")
     dir_ = 1 if request.args.get("dir", "asc") == "asc" else -1
     page = parse_int("page", 1, 1, 1_000_000)
@@ -278,7 +315,17 @@ def list_tickets():
     total = db.tickets.count_documents(q)
     cursor = db.tickets.find(q).sort(sort_field, dir_).skip(skip).limit(limit)
     data = [serialize(d) for d in cursor]
-    return jsonify({"data": data, "meta": {"page": page, "limit": limit, "total": total}})
+
+    # konvertuojam price į eurus
+    for d in data:
+        if "price" in d and d["price"] is not None:
+            d["price"] = round(d["price"] / 100, 2)
+
+    return jsonify({
+        "data": data,
+        "meta": {"page": page, "limit": limit, "total": total}
+    })
+
 
 @app.post("/orders")
 def create_order():

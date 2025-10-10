@@ -24,6 +24,29 @@
       <section id="info" class="card"></section>
 
       <h2 style="margin-top:18px">Tickets</h2>
+      <<div class="card" style="margin-bottom:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end">
+  <div>
+    <label>Section / Location:</label><br>
+    <select id="filterSeat" class="input" style="max-width:150px">
+      <option value="">All</option>
+      <option value="GA">GA</option>
+      <option value="A">A</option>
+      <option value="B">B</option>
+      <option value="C">C</option>
+      <option value="D">D</option>
+    </select>
+  </div>
+  <div>
+    <label>Min price (€):</label><br>
+    <input type="number" id="filterMin" placeholder="0" class="input" style="max-width:100px">
+  </div>
+  <div>
+    <label>Max price (€):</label><br>
+    <input type="number" id="filterMax" placeholder="200" class="input" style="max-width:100px">
+  </div>
+  <button id="applyFilters" class="btn primary" style="height:38px">Filter</button>
+  <button id="resetFilters" class="btn" style="height:38px">Reset</button>
+</div>
       <form id="buyForm" class="card">
         <select id="ticketsDropdown" class="ticket-dropdown" multiple aria-label="Select tickets (mobile)"></select>
 
