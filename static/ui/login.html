@@ -1,0 +1,99 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Login - Ticket Marketplace</title>
+  <link rel="stylesheet" href="/static/ui/events.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="login-container">
+      <div class="login-card">
+        <div class="brand-header">
+          <div class="logo">Tic</div>
+          <h1>Ticket Marketplace</h1>
+          <p>Enter your email to access the marketplace</p>
+        </div>
+
+        <form id="loginForm" class="login-form">
+          <div class="form-group">
+            <label for="emailInput">Email Address</label>
+            <input type="email" id="emailInput" class="input" placeholder="your.email@example.com" required>
+          </div>
+          
+          <button type="submit" id="loginBtn" class="btn primary full-width">Login</button>
+          
+          <div id="loginError" class="error-message" style="display:none;"></div>
+        </form>
+
+        <div class="footer-text">
+          Demo marketplace - Enter any email from the database
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const form = document.getElementById('loginForm');
+      const emailInput = document.getElementById('emailInput');
+      const loginBtn = document.getElementById('loginBtn');
+      const loginError = document.getElementById('loginError');
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const email = emailInput.value.trim();
+        if (!email) {
+          showError('Please enter your email');
+          return;
+        }
+
+        await attemptLogin(email);
+      });
+
+      async function attemptLogin(email) {
+        try {
+          loginBtn.disabled = true;
+          loginBtn.textContent = 'Logging in...';
+          hideError();
+
+          const response = await fetch('/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email })
+          });
+
+          const data = await response.json();
+
+          if (response.ok) {
+            // Redirect based on user type
+            if (data.userType === 'organizer') {
+              window.location.href = '/organizer/dashboard';
+            } else {
+              window.location.href = '/ui';
+            }
+          } else {
+            showError(data.error || 'Login failed');
+          }
+        } catch (err) {
+          console.error('Login error:', err);
+          showError('Network error. Please try again.');
+        } finally {
+          loginBtn.disabled = false;
+          loginBtn.textContent = 'Login';
+        }
+      }
+
+      function showError(message) {
+        loginError.textContent = message;
+        loginError.style.display = 'block';
+      }
+
+      function hideError() {
+        loginError.style.display = 'none';
+      }
+    });
+  </script>
+</body>
+</html>

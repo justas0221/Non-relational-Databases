@@ -1,0 +1,215 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Organizer Dashboard - Ticket Marketplace</title>
+  <link rel="stylesheet" href="/static/ui/events.css" />
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div class="brand">
+        <div class="logo">Tic</div>
+        <div>
+          <div class="title">Organizer Dashboard</div>
+          <div class="meta" style="font-size:12px;color:var(--muted)">Manage your events</div>
+        </div>
+      </div>
+      <div id="authBox" style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)">
+        <span id="authUser"></span>
+        <button id="logoutBtn" class="btn secondary" style="padding:4px 10px;font-size:12px">Logout</button>
+      </div>
+    </header>
+
+    <main id="content">
+      <div class="card">
+        <h2>Create New Event</h2>
+        <form id="eventForm" style="margin-top:16px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div class="form-group">
+              <label for="eventTitle">Event Title</label>
+              <input type="text" id="eventTitle" class="input" placeholder="Concert, Conference, etc." required>
+            </div>
+            <div class="form-group">
+              <label for="eventDate">Event Date & Time</label>
+              <input type="datetime-local" id="eventDate" class="input" required>
+            </div>
+          </div>
+          
+          <div class="form-group" style="margin-top:16px;">
+            <label for="venueSelect">Venue</label>
+            <select id="venueSelect" class="input" required>
+              <option value="">Select a venue...</option>
+            </select>
+          </div>
+
+          <div class="form-group" style="margin-top:16px;">
+            <label for="eventDescription">Description (optional)</label>
+            <textarea id="eventDescription" class="input" rows="3" placeholder="Event details, lineup, etc."></textarea>
+          </div>
+
+          <div class="actions" style="margin-top:16px;">
+            <button type="submit" class="btn primary">Create Event</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card" style="margin-top:24px;">
+        <h2>My Events</h2>
+        <div id="myEvents" style="margin-top:16px;">
+          Loading events...
+        </div>
+      </div>
+
+      <div class="footer">Organizer Dashboard</div>
+    </main>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const authUserEl = document.getElementById('authUser');
+      const logoutBtn = document.getElementById('logoutBtn');
+      const eventForm = document.getElementById('eventForm');
+      const venueSelect = document.getElementById('venueSelect');
+      const myEventsEl = document.getElementById('myEvents');
+
+      let currentOrganizer = null;
+
+      // Auth check
+      fetch('/auth/me').then(r => r.json()).then(me => {
+        if (!me.authenticated || me.userType !== 'organizer') {
+          location.href = '/login';
+          return;
+        }
+        currentOrganizer = me;
+        authUserEl.textContent = `Organizer (${me.userId})`;
+        loadVenues();
+        loadMyEvents();
+      }).catch(() => location.href = '/login');
+
+      logoutBtn.addEventListener('click', async () => {
+        try { await fetch('/auth/logout', {method:'POST'}); } catch(e){}
+        location.href = '/login';
+      });
+
+      async function loadVenues() {
+        try {
+          const response = await fetch('/venues');
+          if (!response.ok) throw new Error('Failed to load venues');
+          const data = await response.json();
+          
+          venueSelect.innerHTML = '<option value="">Select a venue...</option>';
+          (data.data || data || []).forEach(venue => {
+            const option = document.createElement('option');
+            option.value = venue._id;
+            option.textContent = `${venue.name} (${venue.location || 'Location TBD'})`;
+            venueSelect.appendChild(option);
+          });
+        } catch (err) {
+          console.error('Failed to load venues:', err);
+          venueSelect.innerHTML = '<option value="">Failed to load venues</option>';
+        }
+      }
+
+      async function loadMyEvents() {
+        try {
+          const response = await fetch(`/events?organizerId=${currentOrganizer.userId}&limit=100`);
+          if (!response.ok) throw new Error('Failed to load events');
+          const data = await response.json();
+          
+          const events = data.data || [];
+          if (events.length === 0) {
+            myEventsEl.innerHTML = '<p class="meta">No events created yet.</p>';
+            return;
+          }
+
+          myEventsEl.innerHTML = '';
+          events.forEach(event => {
+            const eventEl = document.createElement('div');
+            eventEl.className = 'card';
+            eventEl.style.marginBottom = '12px';
+            
+            const eventDate = new Date(event.eventDate).toLocaleString('en-US', {
+              weekday: 'short',
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric',
+              hour: 'numeric',
+              minute: '2-digit',
+              hour12: true
+            });
+
+            eventEl.innerHTML = `
+              <h4>${escapeHtml(event.title || 'Untitled Event')}</h4>
+              <div class="meta">📅 ${eventDate}</div>
+              ${event.description ? `<p style="margin-top:8px;font-size:14px;">${escapeHtml(event.description)}</p>` : ''}
+              <div style="margin-top:12px;">
+                <a href="/ui/event?eventId=${encodeURIComponent(event._id)}" class="btn secondary" style="font-size:12px;">View Event</a>
+              </div>
+            `;
+            myEventsEl.appendChild(eventEl);
+          });
+        } catch (err) {
+          console.error('Failed to load events:', err);
+          myEventsEl.innerHTML = '<p class="meta">Failed to load events.</p>';
+        }
+      }
+
+      eventForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const title = document.getElementById('eventTitle').value.trim();
+        const date = document.getElementById('eventDate').value;
+        const venueId = document.getElementById('venueSelect').value;
+        const description = document.getElementById('eventDescription').value.trim();
+
+        if (!title || !date || !venueId) {
+          alert('Please fill in all required fields');
+          return;
+        }
+
+        const eventData = {
+          title,
+          eventDate: new Date(date).toISOString(),
+          venueId,
+          organizerId: currentOrganizer.userId
+        };
+
+        if (description) {
+          eventData.description = description;
+        }
+
+        try {
+          const response = await fetch('/events', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(eventData)
+          });
+
+          if (response.ok) {
+            alert('Event created successfully!');
+            eventForm.reset();
+            loadMyEvents(); // Reload the events list
+          } else {
+            const error = await response.json();
+            alert(`Failed to create event: ${error.error || 'Unknown error'}`);
+          }
+        } catch (err) {
+          console.error('Error creating event:', err);
+          alert('Error creating event. Please try again.');
+        }
+      });
+
+      function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, c => ({
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#39;'
+        }[c]));
+      }
+    });
+  </script>
+</body>
+</html>

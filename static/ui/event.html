@@ -17,44 +17,47 @@
           <div class="meta" id="subtitle" style="font-size:12px;color:var(--muted)"></div>
         </div>
       </div>
-      <div></div>
+      <div id="authBox" style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)">
+        <a href="/ui/cart" class="btn secondary" style="padding:4px 10px;font-size:12px;text-decoration:none">Cart</a>
+        <span id="authUser"></span>
+        <button id="logoutBtn" class="btn secondary" style="padding:4px 10px;font-size:12px">Logout</button>
+      </div>
     </header>
 
     <main id="content">
       <section id="info" class="card"></section>
 
       <h2 style="margin-top:18px">Tickets</h2>
-      <<div class="card" style="margin-bottom:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end">
-  <div>
-    <label>Section / Location:</label><br>
-    <select id="filterSeat" class="input" style="max-width:150px">
-      <option value="">All</option>
-      <option value="GA">GA</option>
-      <option value="A">A</option>
-      <option value="B">B</option>
-      <option value="C">C</option>
-      <option value="D">D</option>
-    </select>
-  </div>
-  <div>
-    <label>Min price (€):</label><br>
-    <input type="number" id="filterMin" placeholder="0" class="input" style="max-width:100px">
-  </div>
-  <div>
-    <label>Max price (€):</label><br>
-    <input type="number" id="filterMax" placeholder="200" class="input" style="max-width:100px">
-  </div>
-  <button id="applyFilters" class="btn primary" style="height:38px">Filter</button>
-  <button id="resetFilters" class="btn" style="height:38px">Reset</button>
-</div>
+      
+      <div class="filters-container">
+        <div class="filters-title">Filter Tickets</div>
+        <div class="filters-row">
+          <div class="filter-group">
+            <label class="filter-label" for="filterSeat">Section / Location</label>
+            <select id="filterSeat" class="filter-select">
+              <option value="">All Sections</option>
+              <option value="GA">General Admission</option>
+              <option value="A">Section A</option>
+              <option value="B">Section B</option>
+              <option value="C">Section C</option>
+              <option value="D">Section D</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label class="filter-label" for="filterMin">Min Price (€)</label>
+            <input type="number" id="filterMin" placeholder="0.00" class="filter-input" min="0" step="0.01">
+          </div>
+          <div class="filter-group">
+            <label class="filter-label" for="filterMax">Max Price (€)</label>
+            <input type="number" id="filterMax" placeholder="999.99" class="filter-input" min="0" step="0.01">
+          </div>
+          <button id="applyFilters" class="filter-btn primary">Filter</button>
+          <button id="resetFilters" class="filter-btn secondary">Reset</button>
+        </div>
+      </div>
       <form id="buyForm" class="card">
         <select id="ticketsDropdown" class="ticket-dropdown" multiple aria-label="Select tickets (mobile)"></select>
-
         <div id="tickets" class="tickets-grid"></div>
-
-        <label for="userSelect" style="display:block;margin-top:12px">Buy as user:</label>
-        <select id="userSelect" class="input" aria-label="Select user"></select>
-
         <div class="actions" style="margin-top:12px">
           <button type="submit" class="btn primary">Buy selected tickets</button>
           <a href="/ui" class="btn secondary" style="text-decoration:none;margin-left:8px">Back</a>

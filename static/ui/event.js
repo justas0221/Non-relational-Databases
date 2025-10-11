@@ -1,42 +1,47 @@
-// Sis skriptas ikelia ivykio informacija, bilietus ir vartotojus,
-// leidzia pasirinkti bilietus ir sukurti uzsakyma (/orders),
-// dabar su papildomu bilietu filtravimu pagal kaina ir vietą (pvz. GA).
-
 document.addEventListener('DOMContentLoaded', () => {
-  // nuskaityti parametruose perduota eventId
+  fetch('/auth/me').then(r => r.json()).then(me => {
+    if (!me.authenticated) {
+      location.href = '/login';
+    } else {
+      const authUserEl = document.getElementById('authUser');
+      if (authUserEl) authUserEl.textContent = `Logged in (${me.userType || 'user'})`;
+      const logoutBtn = document.getElementById('logoutBtn');
+      if (logoutBtn) logoutBtn.addEventListener('click', async () => { try { await fetch('/auth/logout',{method:'POST'});} catch(e){} location.href='/login'; });
+      initPage();
+    }
+  }).catch(() => location.href = '/login');
+
+  function initPage() {
   const params = new URLSearchParams(location.search);
   const eventId = params.get('eventId');
 
-  // DOM elementai, i kuriuos rasysime turini
   const titleEl = document.getElementById('title');
+  const subtitleEl = document.getElementById('subtitle');
   const infoEl = document.getElementById('info');
   const ticketsEl = document.getElementById('tickets');
   const dropdownEl = document.getElementById('ticketsDropdown');
-  const userSel = document.getElementById('userSelect');
   const form = document.getElementById('buyForm');
 
-  // Filtrų elementai
   const filterSeat = document.getElementById('filterSeat');
   const filterMin = document.getElementById('filterMin');
   const filterMax = document.getElementById('filterMax');
   const applyBtn = document.getElementById('applyFilters');
+  const resetBtn = document.getElementById('resetFilters');
 
   if (!eventId) {
-    // jei nera pasirinkto ivykio pranesimas ir nutraukimas
-    if (infoEl) infoEl.textContent = 'No event selected';
+    titleEl.textContent = 'No event selected';
+    subtitleEl.textContent = '';
+    if (infoEl) infoEl.style.display = 'none';
     return;
   }
 
-  // kainos eurais
   const currencyFormatter = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'EUR' });
 
-   // pakeicia numeri i valiutos string arba grazina null jei neimanoma
   function formatPrice(n) {
     if (n === null || n === undefined || isNaN(Number(n))) return null;
     return currencyFormatter.format(Number(n));
   }
 
-  // sukuria arba grazina elementa kuriame rodoma uzsakymo suma (order total)
   function ensureTotalElement() {
     let el = document.getElementById('orderTotal');
     if (!el && form) {
@@ -45,71 +50,80 @@ document.addEventListener('DOMContentLoaded', () => {
       el.style.marginTop = '10px';
       el.style.fontWeight = '700';
       el.style.fontSize = '15px';
-      // padeti pries .actions (jei egzistuoja)
       form.querySelector('.actions')?.before(el);
     }
     return el;
   }
 
-   // Apskaiciuoja ir atnaujina uzsakymo suma pagal pazymetus bilietus ir GA kiekius
   function updateTotal() {
     const totalEl = ensureTotalElement();
     if (!totalEl) return;
     try {
       let total = 0;
-      if (dropdownEl && window.getComputedStyle(dropdownEl).display !== 'none') {
-          // mobiliuju telefonu versija: bandom parsinti kaina is pasirinkimo teksto (best-effort)
-        Array.from(dropdownEl.selectedOptions).forEach(opt => {
-          const m = opt.textContent.match(/€\s?([0-9.,]+)/);
-          if (m) total += Number(m[1].replace(',', '.'));
-        });
-      } else {
-        const checked = Array.from(form.querySelectorAll('input[name="ticket"]:checked'));
-        checked.forEach(i => {
-          const p = Number(i.dataset.price || 0);
-          if (!isNaN(p)) total += p;
-        });
+      const gaQtyInput = document.getElementById('gaQty');
+      if (gaQtyInput) {
+        const qty = Math.max(1, Math.min(Number(gaQtyInput.value)||1, Number(gaQtyInput.max)||1));
+        const price = Number(gaQtyInput.dataset.price || 0);
+        total += qty * price;
       }
+      const checked = Array.from(form.querySelectorAll('input[name="ticket"]:checked'));
+      checked.forEach(i => { const p = Number(i.dataset.price || 0); if(!isNaN(p)) total += p; });
       totalEl.textContent = total > 0 ? `Order total: ${formatPrice(total)}` : 'Order total: —';
     } catch (err) {
       console.error('updateTotal error', err);
       totalEl.textContent = 'Order total: —';
     }
   }
- // Užkrauna ivykio metaduomenis (pavadinima, data, vieta)
   async function loadEvent() {
     try {
       let ev = null;
       try {
-        // jei serveris palaiko /events/<id> - bandome tiesiogiai
         const rId = await fetch('/events/' + encodeURIComponent(eventId));
         if (rId.ok) ev = await rId.json();
-      } catch (err) { /* ignore ir krentame i fallback */ }
+      } catch (err) { }
 
 
       if (!ev) {
-        // fallback: uzkrauname saraša ir randame pagal id
         const resp = await fetch('/events?limit=1000');
         if (!resp.ok) { infoEl.textContent = 'Failed to load event'; return; }
         const je = await resp.json();
         ev = (je.data || []).find(e => e._id === eventId);
       }
 
-      if (!ev) { infoEl.textContent = 'Event not found'; return; }
-      // atvaizduojame pavadinima ir data bei vieta
-
+      if (!ev) { 
+        titleEl.textContent = 'Event not found';
+        subtitleEl.textContent = '';
+        infoEl.style.display = 'none'; 
+        return; 
+      }
+      
       titleEl.textContent = ev.title || 'Event';
-      const when = ev.eventDate ? new Date(ev.eventDate).toLocaleString() : '';
-      infoEl.innerHTML = `<div>${when}</div><div class="meta">${escapeHtml(ev.location || '')}</div>`;
-      // uzkrauname bilietus ir vartotojus lygiagreciai
-      await Promise.all([loadTickets(), loadUsers()]);
+      const when = ev.eventDate ? new Date(ev.eventDate).toLocaleString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      }) : '';
+      subtitleEl.textContent = when;
+      
+      if (ev.location || ev.description) {
+        infoEl.innerHTML = `${ev.location ? `📍 ${escapeHtml(ev.location)}` : ''}${ev.description ? `<br>ℹ️ ${escapeHtml(ev.description)}` : ''}`;
+        infoEl.style.display = 'flex';
+      } else {
+        infoEl.style.display = 'none';
+      }
+  await loadTickets();
     } catch (err) {
       console.error('loadEvent error', err);
-      infoEl.textContent = 'Error loading event (see console)';
+      titleEl.textContent = 'Error loading event';
+      subtitleEl.textContent = 'See console for details';
+      infoEl.style.display = 'none';
     }
   }
 
-    // Uzkrauna bilietus is serverio, rusiuoja ir atvaizduoja juos sąsajoje
   async function loadTickets() {
     try {
       ticketsEl.innerHTML = 'Loading tickets...';
@@ -133,7 +147,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      // Rusiavimas: GA pirmas, tada pagal seat/type
       data.sort((a, b) => {
         const aGA = Boolean(a.isGeneralAdmission || (a.type && String(a.type).toLowerCase().includes('ga')));
         const bGA = Boolean(b.isGeneralAdmission || (b.type && String(b.type).toLowerCase().includes('ga')));
@@ -143,40 +156,82 @@ document.addEventListener('DOMContentLoaded', () => {
         return aKey.localeCompare(bKey, undefined, { numeric: true, sensitivity: 'base' });
       });
 
-      // atvaizdavimas: kiekvienam bilietui sukuriamas korteles elementatas dropdown opcija
-      data.forEach(t => {
-         // paruosiame kaina ir teksta
+      const gaTickets = data.filter(t => t.type && String(t.type).toUpperCase()==='GA');
+      const seatTickets = data.filter(t => !(t.type && String(t.type).toUpperCase()==='GA'));
+      if (gaTickets.length) {
+        const gaAvail = gaTickets.reduce((s,x)=> s + (x.available || 1), 0);
+        const priceNum = (typeof gaTickets[0].price === 'number') ? gaTickets[0].price : Number(gaTickets[0].price)||0;
+        const priceLabel = formatPrice(priceNum);
+        const gaDiv = document.createElement('div');
+        gaDiv.className='ticket';
+        gaDiv.innerHTML = `<div class="ticket-info" style="display:flex;flex-direction:column;gap:6px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+              <div class="ticket-type" style="font-size:16px">General Admission</div>
+              <div class="meta" style="font-weight:600">${priceLabel}</div>
+            </div>
+            <div style="display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-top:4px">
+              <label style="display:flex;align-items:center;gap:6px">Quantity:
+                <input type="number" id="gaQty" data-price="${priceNum}" min="1" max="${gaAvail}" value="1" style="width:80px;padding:4px">
+              </label>
+              <span class="meta" style="background:#eef;padding:4px 10px;border-radius:14px;font-size:12px">Available: ${gaAvail}</span>
+              <button type="button" id="gaAddBtn" class="btn secondary" style="padding:6px 12px">Add to Cart</button>
+            </div>
+          </div>`;
+        ticketsEl.appendChild(gaDiv);
+        const gaAddBtn = gaDiv.querySelector('#gaAddBtn');
+        gaAddBtn?.addEventListener('click', async () => {
+          const qtyInput = document.getElementById('gaQty');
+          const qty = Math.max(1, Math.min(Number(qtyInput.value)||1, Number(qtyInput.max)||1));
+          gaAddBtn.disabled = true;
+          try {
+            const r = await fetch('/cart/items', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ticketId:'GA', quantity: qty, eventId})});
+            if(!r.ok){
+              const text = await r.text().catch(()=>'<no body>');
+              alert('Add GA to cart failed: '+r.status+'\n'+text);
+            } else { showCartToast('GA tickets added'); updateCartBadge(); }
+          } catch(err){ console.error('ga add error', err); }
+          finally { gaAddBtn.disabled = false; }
+        });
+      }
+      seatTickets.forEach(t => {
         const priceNum = (typeof t.price === 'number') ? t.price : (isNaN(Number(t.price)) ? null : Number(t.price));
         const priceLabel = priceNum !== null ? formatPrice(priceNum) : 'Price unavailable';
-
         const d = document.createElement('div');
-        d.className = 'ticket';
+        d.className='ticket';
         const checkboxId = 'ticket_' + (t._id || Math.random().toString(36).slice(2,9));
-        const seat = t.seat ? ` • ${escapeHtml(t.seat)}` : '';
         const desc = t.description ? `<div class="meta">${escapeHtml(t.description)}</div>` : '';
         d.innerHTML = `<label for="${checkboxId}">
-                        <input type="checkbox" id="${checkboxId}" name="ticket" value="${encodeURIComponent(t._id)}" data-price="${priceNum ?? ''}" />
-                        <div style="flex:1">
-                          <div><strong>${escapeHtml(t.type||'Ticket')}</strong>${seat}</div>
-                          ${desc}
-                        </div>
-                        <div class="meta">${priceLabel}</div>
-                      </label>`;
+            <input type="checkbox" id="${checkboxId}" name="ticket" value="${encodeURIComponent(t._id)}" data-price="${priceNum ?? ''}" />
+            <div class="ticket-info">
+              <div class="ticket-type">${escapeHtml(t.type||'Ticket')}</div>
+              ${t.seat ? `<div class="ticket-seat">${escapeHtml(t.seat)}</div>` : ''}
+              ${desc}
+            </div>
+            <div class="meta">${priceLabel}</div>
+          </label>
+          <button type="button" class="btn secondary addCartBtn" data-id="${t._id}" style="margin-left:6px">Add to Cart</button>`;
         ticketsEl.appendChild(d);
-
-        
-        // mobiliuju telefonu versija: prideti opciją i dropdown (su kainos tekstu)
-        if (dropdownEl) {
-          const opt = document.createElement('option');
-          opt.value = t._id;
-          opt.textContent = `${t.type || 'Ticket'}${t.seat ? ' • ' + t.seat : ''} ${priceLabel !== null ? priceLabel : ''}`;
-          dropdownEl.appendChild(opt);
-        }
       });
 
-      // atnaujiname suma kai keiciasi pasirinkimai
       ticketsEl.querySelectorAll('input[name="ticket"]').forEach(chk => {
         chk.addEventListener('change', updateTotal);
+      });
+      ticketsEl.querySelectorAll('.addCartBtn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          btn.disabled = true;
+          try {
+            const r = await fetch('/cart/items', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ticketId: btn.dataset.id})});
+            if(!r.ok){
+              const text = await r.text().catch(()=>'<no body>');
+              alert('Add to cart failed: '+r.status+'\n'+text);
+            } else {
+              const j = await r.json();
+              showCartToast('Added to cart');
+              updateCartBadge();
+            }
+          } catch(err){ console.error('addCart error', err); }
+          finally { btn.disabled=false; }
+        });
       });
       if (dropdownEl) dropdownEl.addEventListener('change', updateTotal);
 
@@ -187,26 +242,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Uzkrauna vartotoju sarasa i "Buy as user" select'a
-  async function loadUsers() {
-    try {
-      userSel.innerHTML = '<option value="">Select user</option>';
-      const r = await fetch('/users?limit=1000');
-      if (!r.ok) { userSel.innerHTML = '<option>failed</option>'; return; }
-      const j = await r.json();
-      (j.data || []).forEach(u => {
-        const o = document.createElement('option');
-        o.value = u._id;
-        o.textContent = `${u.name || u.email} (${u.email})`;
-        userSel.appendChild(o);
-      });
-    } catch (err) {
-      console.error('loadUsers error', err);
-      userSel.innerHTML = '<option>failed</option>';
-    }
-  }
-
-  // Apdorojame formos submit: surenkame pasirinkimus ir siunciame uzsakyma i /orders
   if (applyBtn) {
     applyBtn.addEventListener('click', ev => {
       ev.preventDefault();
@@ -214,28 +249,35 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Užsakymo pateikimas
+  if (resetBtn) {
+    resetBtn.addEventListener('click', ev => {
+      ev.preventDefault();
+      filterSeat.value = '';
+      filterMin.value = '';
+      filterMax.value = '';
+      loadTickets();
+    });
+  }
+
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
-    const userId = userSel.value;
-    if (!userId) { alert('Select a user'); return; }
-
-
-    // surinkti pasirinktas bilietų id vertes (mobile arba desktop)
     let checked = [];
     try {
-      if (dropdownEl && window.getComputedStyle(dropdownEl).display !== 'none') {
-        checked = Array.from(dropdownEl.selectedOptions).map(o => o.value);
-      } else {
-        checked = Array.from(form.querySelectorAll('input[name="ticket"]:checked')).map(i => decodeURIComponent(i.value));
-      }
+      checked = Array.from(form.querySelectorAll('input[name="ticket"]:checked')).map(i => decodeURIComponent(i.value));
     } catch (err) {
       console.error('collect tickets error', err);
     }
-
-    if (!checked.length) { alert('Select one or more tickets'); return; }
-
-    const payload = { userId, items: checked.map(tid => ({ ticketId: tid })) };
+    const gaQtyInput = document.getElementById('gaQty');
+    let gaQty = 0;
+    if (gaQtyInput) {
+      gaQty = Math.max(1, Math.min(Number(gaQtyInput.value)||1, Number(gaQtyInput.max)||1));
+    }
+    if (!checked.length && !gaQty) { alert('Select at least one ticket or GA quantity'); return; }
+    let items = checked.map(tid => ({ ticketId: tid }));
+    if (gaQtyInput && gaQty > 0) {
+      items.push({ ticketId: 'GA', quantity: gaQty });
+    }
+    const payload = { items };
     try {
       const r = await fetch('/orders', {
         method: 'POST',
@@ -255,9 +297,54 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Pradinis uzkrovimas
   loadEvent();
+  updateCartBadge();
+  }
 });
 
-// Nedidele apsauga prieš XSS ir pakeicia specialius simbolius i HTML entity
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function showCartToast(msg){
+  let t = document.getElementById('cartToast');
+  if(!t){
+    t = document.createElement('div');
+    t.id='cartToast';
+    t.style.position='fixed';
+    t.style.bottom='20px';
+    t.style.right='20px';
+    t.style.background='rgba(0,0,0,0.75)';
+    t.style.color='#fff';
+    t.style.padding='8px 14px';
+    t.style.borderRadius='4px';
+    t.style.fontSize='14px';
+    t.style.zIndex='9999';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.opacity='1';
+  setTimeout(()=>{t.style.transition='opacity .4s'; t.style.opacity='0';}, 1600);
+}
+
+async function updateCartBadge(){
+  try {
+    const r = await fetch('/cart');
+    if(!r.ok) return;
+    const j = await r.json();
+    let badge = document.getElementById('cartBadge');
+    if(!badge){
+      const cartLink = document.querySelector('a[href="/ui/cart"]');
+      if(cartLink){
+        badge = document.createElement('span');
+        badge.id='cartBadge';
+        badge.style.background='#ff0066';
+        badge.style.color='#fff';
+        badge.style.fontSize='10px';
+        badge.style.padding='2px 5px';
+        badge.style.borderRadius='10px';
+        badge.style.marginLeft='4px';
+        cartLink.appendChild(badge);
+      }
+    }
+    if(badge) badge.textContent = j.count || 0;
+  } catch(err){}
+}

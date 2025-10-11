@@ -7,7 +7,6 @@ async function loadUsers(){
     const hasPhone = document.getElementById('hasPhoneFilter')?.value || '';
     const q = document.getElementById('qFilter')?.value?.trim() || '';
 
-    // build query params for first request
     const params1 = new URLSearchParams();
     if (hasPhone) params1.set('hasPhone', hasPhone);
     if (q) params1.set('q', q);
@@ -23,7 +22,6 @@ async function loadUsers(){
     let users = j1.data || [];
     const total = (j1.meta && typeof j1.meta.total === 'number') ? j1.meta.total : users.length;
 
-    // if server returned a partial page, fetch all using total as limit
     if (users.length < total) {
       const params2 = new URLSearchParams({ limit: String(total) });
       if (hasPhone) params2.set('hasPhone', hasPhone);
@@ -57,7 +55,6 @@ async function loadUsers(){
       tbody.appendChild(tr);
     });
 
-    // attach delegation listeners for edit/delete buttons
     tbody.querySelectorAll('.editBtn').forEach(b => b.addEventListener('click', () => editUser(b.dataset.id)));
     tbody.querySelectorAll('.delBtn').forEach(b => b.addEventListener('click', () => deleteUser(b.dataset.id)));
 
@@ -67,7 +64,6 @@ async function loadUsers(){
   }
 }
 
-// create user: omit empty phoneNumber
 async function createUserHandler(e){
   e.preventDefault();
   const name = document.getElementById('name').value.trim();
@@ -109,7 +105,6 @@ async function editUser(id){
     const phoneNumber = prompt('Phone', u.phoneNumber || '');
     if(phoneNumber === null) return;
 
-    // build patch payload, omit phoneNumber when empty to trigger unset on server
     const payload = { name, email };
     if (phoneNumber) payload.phoneNumber = phoneNumber;
     const r = await fetch('/users/' + encodeURIComponent(id), {
@@ -144,7 +139,6 @@ async function deleteUser(id){
   }
 }
 
-// wire up controls once DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
   const form = document.getElementById('createForm');
   if (form) form.addEventListener('submit', createUserHandler);
