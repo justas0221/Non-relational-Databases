@@ -5,6 +5,7 @@ from bson import ObjectId
 from bson.int64 import Int64
 from datetime import datetime, timezone
 import os
+from redis_cache import cache, CacheKeys, CacheInvalidator, cache_result, rate_limiter
 from functools import wraps
 from dotenv import load_dotenv
 load_dotenv()
@@ -155,6 +156,7 @@ def delete_user(user_id):
     res = db.users.delete_one({"_id": _id})
     if res.deleted_count == 0:
         return jsonify({"error": "not found"}), 404
+    CacheInvalidator.invalidate_user(user_id) #cache implementacija
     return jsonify({"ok": True}), 200
 
 @app.patch("/users/<user_id>")
@@ -190,6 +192,7 @@ def update_user(user_id):
         return jsonify({"error": "email already exists"}), 409
     if not res:
         return jsonify({"error": "not found"}), 404
+    CacheInvalidator.invalidate_user(user_id) #cache implementacija
     return jsonify(serialize(res))
 
 
@@ -256,6 +259,7 @@ def organizer_dashboard():
     return app.send_static_file("ui/organizer.html")
 
 @app.get("/venues")
+@cache_result("venues_list", ttl=600)  # 10 minučių cache
 def list_venues():
     try:
         venues = list(db.venues.find())
@@ -306,6 +310,8 @@ def create_event():
     try:
         result = db.events.insert_one(event)
         created_event = db.events.find_one({"_id": result.inserted_id})
+
+        CacheInvalidator.invalidate_event(str(result.inserted_id)) #cache implementacija
     except Exception as e:
         return jsonify({"error": "Failed to create event"}), 500
 
@@ -338,6 +344,7 @@ def health():
     return {"status": "ok"}
 
 @app.get("/events")
+@cache_result("event_list", ttl=30)  # 30 sekundžių cache
 def list_events():
     q = {}
     if v := request.args.get("organizerId"):
@@ -373,6 +380,7 @@ def list_events():
     return jsonify({"data": data, "meta": {"page": page, "limit": limit, "total": total}})
 
 @app.get("/tickets")
+@cache_result("tickets_list", ttl=60)  # 1 minutė cache
 def list_tickets():
     event_id = request.args.get("eventId")
     if not event_id:
@@ -513,6 +521,7 @@ def create_order():
     ok, result = _create_order_internal(user_id, ticket_ids)
     if not ok:
         return jsonify(result.get('body', {"error": "order_failed"})), result.get('status', 400)
+    CacheInvalidator.invalidate_order_related() #cache implementacija   
     return jsonify(serialize(result['order'])), 201
 
 def _create_order_internal(user_id, ticket_ids):
@@ -593,6 +602,7 @@ def pay_order(order_id):
     )
     if not res:
         return jsonify({"error":"order not pending or not found"}), 409
+    CacheInvalidator.invalidate_order_related() #cache implementacija
     return jsonify(serialize(res))
 
 @app.patch("/orders/<order_id>/cancel")
@@ -610,6 +620,7 @@ def cancel_order(order_id):
     return jsonify(serialize(res))
 
 @app.get("/analytics/top-events")
+@cache_result("analytics_top_events", ttl=900)  # 15 minučių cache
 def top_events():
     limit = parse_int("limit", 10, 1, 100)
     pipeline = [
@@ -635,6 +646,7 @@ def top_events():
     return jsonify(list(db.orders.aggregate(pipeline)))
 
 @app.get("/analytics/availability")
+@cache_result("analytics_availability", ttl=900)  # 15 minučių cache
 def availability():
     pipeline = [
         {"$match": {"status": "paid"}},
@@ -793,6 +805,42 @@ def cart_checkout():
 @login_required
 def ui_cart():
     return app.send_static_file('ui/cart.html')
+
+@app.get("/cache/status")
+def cache_status():
+    """Testuoja Redis prisijungimą ir cache veikimą"""
+    try:
+        # Test Redis connection
+        cache.redis_client.ping()
+        
+        # Test set/get operations
+        test_key = "test:connection"
+        test_value = {"timestamp": datetime.now().isoformat(), "status": "ok"}
+        
+        # Set test value
+        cache.set(test_key, test_value, 60)
+        
+        # Get test value back
+        retrieved = cache.get(test_key)
+        
+        # Clean up
+        cache.delete(test_key)
+        
+        return jsonify({
+            "redis_connection": "OK",
+            "cache_operations": "OK",
+            "test_data_match": retrieved == test_value,
+            "redis_info": {
+                "url": "redis-cloud",
+                "connected": True
+            }
+        })
+    except Exception as e:
+        return jsonify({
+            "redis_connection": "FAILED", 
+            "error": str(e)
+        }), 500
+
 
 if __name__ == "__main__":
     app.run(debug=True, use_reloader=False)
