@@ -1,5 +1,3 @@
-#pasileiddus .venv faila: "pip install redis"
-
 import redis
 import json
 import os
@@ -87,10 +85,15 @@ class RedisCache:
             return 0
         try:
             keys = self.redis_client.keys(pattern)
+            print(f"Pattern '{pattern}' found keys: {keys}")
             if keys:
-                return self.redis_client.delete(*keys)
+                deleted = self.redis_client.delete(*keys)
+                print(f"Deleted {deleted} keys")
+                return deleted
+            print(f"No keys found for pattern '{pattern}'")
             return 0
-        except redis.RedisError:
+        except redis.RedisError as e:
+            print(f"Redis error in clear_pattern: {e}")
             return 0
     
     def exists(self, key: str) -> bool:
@@ -148,7 +151,7 @@ def cache_result(key_prefix: str, ttl: Optional[int] = None):
                     if hasattr(request, 'args') and request.args:
                         # Bypass cache jei refresh arba nocache
                         if request.args.get('_refresh') or request.args.get('nocache'):
-                            print(f"🔄 Cache bypass: {key_prefix}")
+                            print(f"Cache bypass: {key_prefix}")
                             return func(*args, **kwargs)
                         
                         # Tik svarbūs parametrai į cache key
@@ -196,31 +199,6 @@ class CacheKeys:
     """Statinė klasė cache raktų generavimui"""
     
     @staticmethod
-    def user(user_id: str) -> str:
-        """Vartotojo cache raktas"""
-        return f"user:{user_id}"
-    
-    @staticmethod
-    def event(event_id: str) -> str:
-        """Įvykio cache raktas"""
-        return f"event:{event_id}"
-    
-    @staticmethod
-    def events_list(page: int, limit: int, filters: str = "") -> str:
-        """Įvykių sąrašo cache raktas su puslapiavimu ir filtrais"""
-        return f"events:list:{page}:{limit}:{hash(filters)}"
-    
-    @staticmethod
-    def tickets(event_id: str, filters: str = "") -> str:
-        """Bilietų cache raktas konkrečiam įvykiui"""
-        return f"tickets:{event_id}:{hash(filters)}"
-    
-    @staticmethod
-    def venues() -> str:
-        """Visų vietų cache raktas"""
-        return "venues:all"
-    
-    @staticmethod
     def analytics_top_events(limit: int) -> str:
         """Top įvykių analitikos cache raktas"""
         return f"analytics:top_events:{limit}"
@@ -235,34 +213,10 @@ class CacheInvalidator:
     """Klasė cache trinimui po duomenų atnaujinimo"""
     
     @staticmethod
-    def invalidate_user(user_id: str):
-        """Ištrina visą su vartotoju susijusį cache"""
-        cache.delete(CacheKeys.user(user_id))
-        print(f"🗑️ Cache invalidated: user {user_id}")
-
-    
-    @staticmethod
-    def invalidate_event(event_id: str):
-        """Ištrina įvykio ir susijusį cache (bilietus, analitika)"""
-        cache.delete(CacheKeys.event(event_id))
-        cache.clear_pattern(f"events_list:*")  # Pataisyta pattern
-        cache.clear_pattern(f"tickets_list:*")  # Pataisyta pattern
-        cache.clear_pattern("analytics*")
-        print(f"Cache invalidated: event {event_id}")
-
-    
-    @staticmethod
     def invalidate_order_related():
-        """Ištrina cache paveiktą užsakymų (analitika, bilietai)"""
+        """Ištrina analytics cache kai sukuriamas naujas orderis"""
         cache.clear_pattern("analytics*")
-        cache.clear_pattern("tickets_list:*")
-        print("Cache invalidated: order related")
-    
-    @staticmethod
-    def invalidate_venues():
-        """Ištrina vietų cache"""
-        cache.delete(CacheKeys.venues())
-        print("Cache invalidated: venues")
+        print("Cache invalidated: analytics (order created)")
 
 # Rate limiting funkcionalumas - apsauga nuo per dažnų užklausų
 class RateLimiter:
