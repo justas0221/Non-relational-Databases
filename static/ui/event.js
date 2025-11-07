@@ -208,30 +208,12 @@ document.addEventListener('DOMContentLoaded', () => {
               ${desc}
             </div>
             <div class="meta">${priceLabel}</div>
-          </label>
-          <button type="button" class="btn secondary addCartBtn" data-id="${t._id}" style="margin-left:6px">Add to Cart</button>`;
+          </label>`;
         ticketsEl.appendChild(d);
       });
 
       ticketsEl.querySelectorAll('input[name="ticket"]').forEach(chk => {
         chk.addEventListener('change', updateTotal);
-      });
-      ticketsEl.querySelectorAll('.addCartBtn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          btn.disabled = true;
-          try {
-            const r = await fetch('/cart/items', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ticketId: btn.dataset.id})});
-            if(!r.ok){
-              const text = await r.text().catch(()=>'<no body>');
-              alert('Add to cart failed: '+r.status+'\n'+text);
-            } else {
-              const j = await r.json();
-              showCartToast('Added to cart');
-              updateCartBadge();
-            }
-          } catch(err){ console.error('addCart error', err); }
-          finally { btn.disabled=false; }
-        });
       });
       if (dropdownEl) dropdownEl.addEventListener('change', updateTotal);
 
@@ -267,34 +249,50 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (err) {
       console.error('collect tickets error', err);
     }
-    const gaQtyInput = document.getElementById('gaQty');
-    let gaQty = 0;
-    if (gaQtyInput) {
-      gaQty = Math.max(1, Math.min(Number(gaQtyInput.value)||1, Number(gaQtyInput.max)||1));
+    
+    if (!checked.length) { 
+      alert('Select at least one ticket'); 
+      return; 
     }
-    if (!checked.length && !gaQty) { alert('Select at least one ticket or GA quantity'); return; }
-    let items = checked.map(tid => ({ ticketId: tid }));
-    if (gaQtyInput && gaQty > 0) {
-      items.push({ ticketId: 'GA', quantity: gaQty });
-    }
-    const payload = { items };
-    try {
-      const r = await fetch('/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      if (r.status === 201) {
-        alert('Order created');
-        location.reload();
-        return;
+    
+    // Add each selected ticket to cart
+    let successCount = 0;
+    let failCount = 0;
+    
+    for (const ticketId of checked) {
+      try {
+        const r = await fetch('/cart/items', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ticketId })
+        });
+        
+        if (r.ok) {
+          successCount++;
+        } else {
+          failCount++;
+          console.error(`Failed to add ticket ${ticketId}:`, r.status);
+        }
+      } catch (err) {
+        failCount++;
+        console.error(`Error adding ticket ${ticketId}:`, err);
       }
-      const text = await r.text().catch(() => '<no body>');
-      alert('Failed: ' + r.status + '\n' + text);
-    } catch (err) {
-      console.error('create order error', err);
-      alert('Error creating order (see console)');
     }
+    
+    if (successCount > 0) {
+      showCartToast(`${successCount} ticket(s) added to cart`);
+      updateCartBadge();
+      // Uncheck all checkboxes
+      form.querySelectorAll('input[name="ticket"]:checked').forEach(chk => chk.checked = false);
+      updateTotal();
+    }
+    
+    if (failCount > 0) {
+      alert(`${failCount} ticket(s) could not be added (already reserved or sold)`);
+    }
+    
+    // Reload tickets to refresh availability
+    await loadTickets();
   });
 
   loadEvent();

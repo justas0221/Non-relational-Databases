@@ -39,37 +39,81 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch(err){}
   }
 
-  async function load(q) {
+  // ATNAUJINTA load funkcija su forceRefresh parametru
+  async function load(q, forceRefresh = false) {
     listEl.innerHTML = 'Loading...';
     const params = new URLSearchParams();
     if (q) params.set('q', q);
     params.set('limit', '1000');
-    const r = await fetch('/events?' + params.toString());
-    if (!r.ok) { listEl.textContent = 'Failed to load events'; return; }
-    const j = await r.json();
-    const data = j.data || [];
-    if (!data.length) { listEl.innerHTML = '<p>No events</p>'; return; }
-    listEl.innerHTML = '';
-    data.forEach(ev => {
-      const c = document.createElement('div');
-      c.className = 'card';
-      const eventDate = new Date(ev.eventDate).toLocaleString('en-US', {
-        weekday: 'short',
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true
+    
+    // Pridėti cache bypass jei force refresh
+    if (forceRefresh) {
+      params.set('_refresh', Date.now());
+    }
+    
+    try {
+      const r = await fetch('/events?' + params.toString());
+      if (!r.ok) { listEl.textContent = 'Failed to load events'; return; }
+      const j = await r.json();
+      const data = j.data || [];
+      if (!data.length) { listEl.innerHTML = '<p>No events</p>'; return; }
+      listEl.innerHTML = '';
+      data.forEach(ev => {
+        const c = document.createElement('div');
+        c.className = 'card';
+        const eventDate = new Date(ev.eventDate).toLocaleString('en-US', {
+          weekday: 'short',
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        });
+        c.innerHTML = `<h3>${escapeHtml(ev.title || 'Untitled')}</h3>
+                       <div class="meta">${eventDate}</div>
+                       <div style="margin-top:8px">
+                         <a href="/ui/event?eventId=${encodeURIComponent(ev._id)}" class="btn primary">View & Buy tickets</a>
+                       </div>`;
+        listEl.appendChild(c);
       });
-      c.innerHTML = `<h3>${escapeHtml(ev.title || 'Untitled')}</h3>
-                     <div class="meta">📅 ${eventDate}</div>
-                     <div style="margin-top:8px">
-                       <a href="/ui/event?eventId=${encodeURIComponent(ev._id)}" class="btn primary">View & Buy tickets</a>
-                     </div>`;
-      listEl.appendChild(c);
-    });
+    } catch (err) {
+      console.error('Events load error:', err);
+      listEl.textContent = 'Error loading events';
+    }
   }
+
+  // NAUJAS: Refresh mygtukas
+  const refreshBtn = document.createElement('button');
+  refreshBtn.textContent = 'Refresh';
+  refreshBtn.className = 'btn secondary';
+  refreshBtn.style.marginLeft = '10px';
+  refreshBtn.onclick = () => {
+    console.log('🔄 Force refreshing events...');
+    load(qIn.value.trim(), true);
+  };
+  
+  // Pridėti refresh mygtuką šalia search mygtuko
+  const searchContainer = btn.parentElement || document.querySelector('.searchbar') || document.querySelector('.controls');
+  if (searchContainer) {
+    searchContainer.appendChild(refreshBtn);
+  }
+
+  // NAUJAS: Auto refresh grįžus į tab'ą
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      console.log('📱 Tab became visible - auto refreshing...');
+      setTimeout(() => load(qIn.value.trim(), true), 500);
+    }
+  });
+
+  // NAUJAS: Auto refresh grįžus iš kito puslapio (back button)
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted) {
+      console.log('⬅️ Back button detected - refreshing...');
+      setTimeout(() => load(qIn.value.trim(), true), 200);
+    }
+  });
 
   btn.addEventListener('click', () => load(qIn.value.trim()));
   load('');
