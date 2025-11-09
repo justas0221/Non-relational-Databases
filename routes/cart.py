@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify, session
 from .utils import oid, login_required
 from redis_cache import cache, CacheInvalidator
+from routes.cart_activity import track_cart_activity
 
 cart = Blueprint('cart', __name__)
 
@@ -13,7 +14,7 @@ def init_cart(app, db, create_order_internal_fn):
         user_id = session.get('user_id')
         cart_key = f"cart:{user_id}"
         
-        # Gauti visus ticket ID iš Redis Set
+        # Get all ticket IDs from Redis Set
         ticket_ids_bytes = cache.redis_client.smembers(cart_key) if cache.redis_client else set()
         ticket_ids = [oid(t.decode() if isinstance(t, bytes) else t) for t in ticket_ids_bytes]
         ticket_ids = [t for t in ticket_ids if t]  # Filter None values
@@ -77,7 +78,7 @@ def init_cart(app, db, create_order_internal_fn):
             if len(available_ga) < qty:
                 return jsonify({"error": "not enough GA available", "available": len(available_ga)}), 409
             
-            # Redis Set: pridėti GA bilietus
+            # Redis Set: add GA tickets
             added = 0
             for t in available_ga:
                 sid = str(t['_id'])
@@ -85,6 +86,20 @@ def init_cart(app, db, create_order_internal_fn):
                     cache.redis_client.sadd(cart_key, sid)
                     cache.redis_client.expire(cart_key, 900)  # 15 min TTL
                     added += 1
+                    # Track cart add to Cassandra
+                    try:
+                        ticket_doc = db.tickets.find_one({"_id": t['_id']})
+                        track_cart_activity(
+                            user_id=str(user_id),
+                            action='add',
+                            ticket_id=sid,
+                            event_id=str(event_id),
+                            ticket_type=ticket_doc.get('type', 'GA'),
+                            ticket_price=ticket_doc.get('price', 0),
+                            ticket_seat=ticket_doc.get('seat', '')
+                        )
+                    except Exception as e:
+                        print(f"Cassandra tracking error: {e}")
                 if added >= qty:
                     break
             return get_cart()
@@ -102,13 +117,29 @@ def init_cart(app, db, create_order_internal_fn):
         if conflict:
             return jsonify({"error": "ticket already reserved/sold"}), 409
         
-        # Redis Set: pridėti bilietą
-        tid_str = str(tid)
-        if cache.redis_client.sismember(cart_key, tid_str):
+        # Redis Set: add ticket
+        sid = str(tid)
+        if cache.redis_client.sismember(cart_key, sid):
             return jsonify({"ok": True, "message": "already in cart"})
         
-        cache.redis_client.sadd(cart_key, tid_str)
+        cache.redis_client.sadd(cart_key, sid)
         cache.redis_client.expire(cart_key, 900)  # 15 min TTL
+        
+        # Track cart add to Cassandra
+        try:
+            ticket_doc = db.tickets.find_one({"_id": tid})
+            track_cart_activity(
+                user_id=str(user_id),
+                action='add',
+                ticket_id=sid,
+                event_id=str(ticket_doc.get('eventId', '')),
+                ticket_type=ticket_doc.get('type', ''),
+                ticket_price=ticket_doc.get('price', 0),
+                ticket_seat=ticket_doc.get('seat', '')
+            )
+        except Exception as e:
+            print(f"Cassandra tracking error: {e}")
+        
         return get_cart()
 
     @cart.delete("/cart/items/<ticket_id>")
@@ -117,7 +148,24 @@ def init_cart(app, db, create_order_internal_fn):
         user_id = session.get('user_id')
         cart_key = f"cart:{user_id}"
         
-        # Redis Set: ištrinti bilietą
+        # Track cart removal before actually removing
+        try:
+            tid_obj = oid(ticket_id)
+            ticket_doc = db.tickets.find_one({"_id": tid_obj}) if tid_obj else None
+            if ticket_doc:
+                track_cart_activity(
+                    user_id=str(user_id),
+                    action='remove',
+                    ticket_id=ticket_id,
+                    event_id=str(ticket_doc.get('eventId', '')),
+                    ticket_type=ticket_doc.get('type', ''),
+                    ticket_price=ticket_doc.get('price', 0),
+                    ticket_seat=ticket_doc.get('seat', '')
+                )
+        except Exception as e:
+            print(f"Cassandra tracking error: {e}")
+        
+        # Redis Set: remove ticket
         removed = cache.redis_client.srem(cart_key, ticket_id) if cache.redis_client else 0
         return jsonify({"removed": bool(removed)})
 
@@ -127,7 +175,29 @@ def init_cart(app, db, create_order_internal_fn):
         user_id = session.get('user_id')
         cart_key = f"cart:{user_id}"
         
-        # Redis Hash: ištrinti visą krepšelį
+        # Track all removals before clearing cart
+        try:
+            ticket_ids_bytes = cache.redis_client.smembers(cart_key) if cache.redis_client else set()
+            ticket_ids = [oid(t.decode() if isinstance(t, bytes) else t) for t in ticket_ids_bytes]
+            ticket_ids = [t for t in ticket_ids if t]
+            
+            # Track removal for each ticket
+            for tid in ticket_ids:
+                ticket_doc = db.tickets.find_one({"_id": tid})
+                if ticket_doc:
+                    track_cart_activity(
+                        user_id=str(user_id),
+                        action='remove',
+                        ticket_id=str(tid),
+                        event_id=str(ticket_doc.get('eventId', '')),
+                        ticket_type=ticket_doc.get('type', ''),
+                        ticket_price=ticket_doc.get('price', 0),
+                        ticket_seat=ticket_doc.get('seat', '')
+                    )
+        except Exception as e:
+            print(f"Cassandra tracking error: {e}")
+        
+        # Redis Set: delete entire cart
         cache.redis_client.delete(cart_key) if cache.redis_client else None
         return jsonify({"ok": True})
 
@@ -170,7 +240,7 @@ def init_cart(app, db, create_order_internal_fn):
         # Invalidate analytics cache (order created and paid)
         CacheInvalidator.invalidate_order_related()
         
-        # Redis Set: išvalyti krepšelį po sėkmingo užsakymo
+        # Redis Set: clear cart after successful order
         cache.redis_client.delete(cart_key) if cache.redis_client else None
         return jsonify({"ok": True, "order": serialize(paid_order)}), 201
 

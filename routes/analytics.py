@@ -9,16 +9,16 @@ def init_analytics(db):
     
     @analytics.get("/analytics/top-events")
     def top_events():
-        limit = parse_int("limit", 10, 1, 100)
+        limit = parse_int("limit", 100, 1, 1000)
         cache_key = f"analytics_top_events:{limit}"
         
-        # Pabandyti gauti iš cache
+        # Try to get from cache
         cached = cache.get(cache_key)
         if cached is not None:
             print(f"Cache HIT: analytics_top_events")
             return jsonify(cached)
         
-        # Brangi agregacija
+        # Expensive aggregation
         pipeline = [
             {"$match": {"status": "paid"}},
             {"$unwind": "$items"},
@@ -41,7 +41,7 @@ def init_analytics(db):
         ]
         result = list(db.orders.aggregate(pipeline))
         
-        # Cache'inti rezultatą
+        # Cache result
         cache.set(cache_key, result, 300)  # 5 min TTL
         print(f"Cache SAVE: analytics_top_events (TTL: 300s)")
         
@@ -51,13 +51,13 @@ def init_analytics(db):
     def availability():
         cache_key = "analytics_availability"
         
-        # Pabandyti gauti iš cache
+        # Try to get from cache
         cached = cache.get(cache_key)
         if cached is not None:
             print(f"Cache HIT: analytics_availability")
             return jsonify(cached)
         
-        # Brangi agregacija
+        # Expensive aggregation
         pipeline = [
             {"$match": {"status": "paid"}},
             {"$unwind": "$items"},
@@ -87,7 +87,7 @@ def init_analytics(db):
         for d in data:
             d["eventId"] = str(d.pop("_id"))
         
-        # Cache'inti rezultatą
+        # Cache result
         cache.set(cache_key, data, 300)  # 5 min TTL
         print(f"Cache SAVE: analytics_availability (TTL: 300s)")
         

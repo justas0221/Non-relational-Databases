@@ -61,10 +61,10 @@ def init_tickets(db):
         # 2. Reserved in CARTS (Redis Set members)
         if cache.redis_client:
             try:
-                # Gauti visus cart:* keys
+                # Get all cart:* keys
                 cart_keys = cache.redis_client.keys("cart:*")
                 for cart_key in cart_keys:
-                    # Gauti visus ticket IDs iš cart Set
+                    # Get all ticket IDs from cart Set
                     ticket_ids_in_cart = cache.redis_client.smembers(cart_key)
                     for tid_str in ticket_ids_in_cart:
                         tid_decoded = tid_str.decode() if isinstance(tid_str, bytes) else tid_str

@@ -3,6 +3,7 @@ from datetime import datetime
 from bson.int64 import Int64
 from .utils import oid, serialize, parse_int, organizer_required
 from redis_cache import CacheInvalidator
+from routes.event_views import track_event_view
 
 events = Blueprint('events', __name__)
 
@@ -158,6 +159,19 @@ def init_events(app, db):
         event = db.events.find_one({"_id": _id})
         if not event:
             return jsonify({"error": "event not found"}), 404
+        
+        # Track event view in Cassandra
+        try:
+            user_id = session.get('user_id')
+            if user_id:
+                track_event_view(
+                    user_id=str(user_id),
+                    event_id=event_id,
+                    event_title=event.get('title', ''),
+                    view_type='detail'
+                )
+        except Exception as e:
+            print(f"Cassandra tracking error: {e}")
         
         return jsonify(serialize(event))
     

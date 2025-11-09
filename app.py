@@ -2,6 +2,16 @@ from flask import Flask
 from pymongo import MongoClient
 import os
 from dotenv import load_dotenv
+from routes.auth import init_auth
+from routes.users import init_users
+from routes.events import init_events
+from routes.tickets import init_tickets
+from routes.orders import init_orders
+from routes.cart import init_cart
+from routes.analytics import init_analytics
+from routes.debug import init_debug
+from routes.cart_activity import cart_activity_bp
+from routes.event_views import event_views_bp
 
 load_dotenv()
 
@@ -19,16 +29,6 @@ try:
     db.users.create_index([("email", 1)], unique=True)
 except Exception:
     pass
-
-# Import and register blueprints
-from routes.auth import init_auth
-from routes.users import init_users
-from routes.events import init_events
-from routes.tickets import init_tickets
-from routes.orders import init_orders
-from routes.cart import init_cart
-from routes.analytics import init_analytics
-from routes.debug import init_debug
 
 # Initialize blueprints with db connection
 auth_bp = init_auth(app, db)
@@ -49,6 +49,8 @@ app.register_blueprint(orders_bp)
 app.register_blueprint(cart_bp)
 app.register_blueprint(analytics_bp)
 app.register_blueprint(debug_bp)
+app.register_blueprint(cart_activity_bp)
+app.register_blueprint(event_views_bp)
 
 if __name__ == "__main__":
     app.run(debug=True, use_reloader=False)
