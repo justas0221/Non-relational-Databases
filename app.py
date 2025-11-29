@@ -12,6 +12,9 @@ from routes.analytics import init_analytics
 from routes.debug import init_debug
 from routes.cart_activity import cart_activity_bp
 from routes.event_views import event_views_bp
+from routes.neo4j_graph import neo4j_graph_bp
+from neo4j_connection import run_cypher
+
 
 load_dotenv()
 
@@ -51,6 +54,19 @@ app.register_blueprint(analytics_bp)
 app.register_blueprint(debug_bp)
 app.register_blueprint(cart_activity_bp)
 app.register_blueprint(event_views_bp)
+app.register_blueprint(neo4j_graph_bp)
+
+def _check_neo4j():
+    try:
+        res = run_cypher("RETURN 1 AS ok")
+        if res and res[0].get("ok") == 1:
+            print("Neo4j: connection OK")
+        else:
+            print("Neo4j: unexpected response:", res)
+    except Exception as e:
+        print("Neo4j: connection FAILED:", e)
+
+_check_neo4j()
 
 if __name__ == "__main__":
     app.run(debug=True, use_reloader=False)

@@ -7,11 +7,12 @@ document.addEventListener('DOMContentLoaded', () => {
       if (authUserEl) authUserEl.textContent = `Logged in (${me.userType || 'user'})`;
       const logoutBtn = document.getElementById('logoutBtn');
       if (logoutBtn) logoutBtn.addEventListener('click', async () => { try { await fetch('/auth/logout',{method:'POST'});} catch(e){} location.href='/login'; });
-      initPage();
+      const currentUserId = me.userId || (me.user && me.user._id);
+      initPage(currentUserId);
     }
   }).catch(() => location.href = '/login');
 
-  function initPage() {
+  function initPage(currentUserID) {
   const params = new URLSearchParams(location.search);
   const eventId = params.get('eventId');
 
@@ -295,8 +296,14 @@ document.addEventListener('DOMContentLoaded', () => {
     await loadTickets();
   });
 
-  loadEvent();
-  updateCartBadge();
+    loadEvent();
+    updateCartBadge();
+    if(currentUserID) {
+      loadRecommendations(currentUserID);
+    }
+    if(eventId) {
+      loadSimilarEvents(eventId);
+    }
   }
 });
 
@@ -345,4 +352,80 @@ async function updateCartBadge(){
     }
     if(badge) badge.textContent = j.count || 0;
   } catch(err){}
+}
+
+async function loadRecommendations(userId) {
+    console.log('loadRecommendations for user', userId);
+    
+    const listEl = document.getElementById('recommendations-list');
+    const emptyEl = document.getElementById('recommendations-empty');
+    if (!listEl || !emptyEl || !userId) return;
+
+    listEl.innerHTML = '';
+    emptyEl.style.display = 'none';
+
+    try {
+        const res = await fetch(`/api/graph/user/${userId}/recommended-events?limit=5`);
+        if (!res.ok) {
+            console.error('Failed to load recommendations', await res.text());
+            return;
+        }
+        const data = await res.json();
+        const recs = data.recommendations || [];
+
+        if (recs.length === 0) {
+            emptyEl.style.display = 'block';
+            return;
+        }
+
+        recs.forEach((rec) => {
+          const card = document.createElement('a');
+          card.className = 'recommendation-card';
+          card.href = `/ui/event?eventId=${encodeURIComponent(rec.event_id)}`;
+          card.innerHTML = `
+            <div class="rec-title">${rec.title || rec.event_id}</div>
+            <div class="rec-meta">Match score: ${rec.score}</div>
+          `;
+          listEl.appendChild(card);
+        });
+    } catch (e) {
+        console.error('Error loading recommendations', e);
+    }
+}
+
+async function loadSimilarEvents(eventId) {
+  const listEl = document.getElementById('similar-events-list');
+  const emptyEl = document.getElementById('similar-events-empty');
+  if (!listEl || !emptyEl || !eventId) return;
+
+  listEl.innerHTML = '';
+  emptyEl.style.display = 'none';
+
+  try {
+    const res = await fetch(`/api/graph/event/${eventId}/similar-events?limit=4`);
+    if (!res.ok) {
+      console.error('Failed to load similar events', await res.text());
+      return;
+    }
+    const data = await res.json();
+    const sims = data.similar_events || [];
+
+    if (sims.length === 0) {
+      emptyEl.style.display = 'block';
+      return;
+    }
+
+    sims.forEach((sim) => {
+      const card = document.createElement('a');
+      card.className = 'recommendation-card';
+      card.href = `/ui/event?eventId=${encodeURIComponent(sim.event_id)}`;
+      card.innerHTML = `
+        <div class="rec-title">${sim.title || sim.event_id}</div>
+        <div class="rec-meta">Shared interest score: ${sim.score}</div>
+      `;
+      listEl.appendChild(card);
+    });
+  } catch (e) {
+    console.error('Error loading similar events', e);
+  }
 }

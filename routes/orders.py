@@ -3,11 +3,52 @@ from bson.int64 import Int64
 from datetime import datetime, timezone
 from .utils import oid, serialize
 from redis_cache import CacheInvalidator
+from neo4j_connection import run_cypher
 
 orders = Blueprint('orders', __name__)
 
 def init_orders(db):
     """Initialize order routes with database connection"""
+
+    def _push_order_to_neo4j(order_doc, tickets):
+        """Create/refresh Neo4j ATTENDED edges for this order."""
+        try:
+            if not order_doc:
+                return
+            user_obj_id = order_doc.get("userId")
+            if not user_obj_id:
+                return
+            user_id = str(user_obj_id)
+            created_at = order_doc.get("orderDate")
+            created_at_str = created_at.isoformat() if created_at else None
+
+            event_obj_ids = {t.get("eventId") for t in tickets or [] if t.get("eventId")}
+            if not event_obj_ids:
+                return
+
+            event_titles = {}
+            for ev in db.events.find({"_id": {"$in": list(event_obj_ids)}}, {"title": 1}):
+                event_titles[str(ev["_id"])] = ev.get("title", "Unknown event")
+
+            for event_obj_id in event_obj_ids:
+                event_id = str(event_obj_id)
+                event_title = event_titles.get(event_id, "Unknown event")
+                run_cypher(
+                    """
+                    MERGE (u:User {id: $user_id})
+                    MERGE (e:Event {id: $event_id})
+                    ON CREATE SET e.title = $event_title
+                    MERGE (u)-[:ATTENDED {source: 'order', created_at: $created_at}]->(e)
+                    """,
+                    {
+                        "user_id": user_id,
+                        "event_id": event_id,
+                        "event_title": event_title,
+                        "created_at": created_at_str,
+                    },
+                )
+        except Exception as neo_err:
+            print(f"Neo4j order sync failed: {neo_err}")
     
     def _create_order_internal(user_id, ticket_ids):
         _user = oid(user_id)
@@ -62,6 +103,7 @@ def init_orders(db):
         }
         res = db.orders.insert_one(order)
         created = db.orders.find_one({"_id": res.inserted_id})
+        _push_order_to_neo4j(created, tickets)
         return True, {"order": created}
     
     @orders.post("/orders")
