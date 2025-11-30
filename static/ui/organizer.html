@@ -44,6 +44,18 @@
           </div>
 
           <div class="form-group" style="margin-top:16px;">
+            <label for="categorySelect">Category</label>
+            <select id="categorySelect" class="input" required>
+              <option value="">Select a category...</option>
+              <option value="Koncertas">Koncertas</option>
+              <option value="Sportas">Sportas</option>
+              <option value="Teatras">Teatras</option>
+              <option value="Komedija">Komedija</option>
+              <option value="Festivalis">Festivalis</option>
+            </select>
+          </div>
+
+          <div class="form-group" style="margin-top:16px;">
             <label for="eventDescription">Description (optional)</label>
             <textarea id="eventDescription" class="input" rows="3" placeholder="Event details, lineup, etc."></textarea>
           </div>
@@ -161,9 +173,10 @@
         const title = document.getElementById('eventTitle').value.trim();
         const date = document.getElementById('eventDate').value;
         const venueId = document.getElementById('venueSelect').value;
+        const category = document.getElementById('categorySelect').value;
         const description = document.getElementById('eventDescription').value.trim();
 
-        if (!title || !date || !venueId) {
+        if (!title || !date || !venueId || !category) {
           alert('Please fill in all required fields');
           return;
         }
@@ -172,6 +185,7 @@
           title,
           eventDate: new Date(date).toISOString(),
           venueId,
+          category,
           organizerId: currentOrganizer.userId
         };
 

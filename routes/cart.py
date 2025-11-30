@@ -237,6 +237,8 @@ def init_cart(app, db, create_order_internal_fn):
         # Get updated order
         paid_order = db.orders.find_one({"_id": order_id})
         
+        # Neo4j sync is already done in create_order_internal_fn, no need to repeat
+        
         # Invalidate analytics cache (order created and paid)
         CacheInvalidator.invalidate_order_related()
         

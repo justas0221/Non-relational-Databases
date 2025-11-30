@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 from pymongo.errors import DuplicateKeyError
 from .utils import oid, serialize, parse_int, login_required
+from neo4j_connection import execute_cypher
 
 users = Blueprint('users', __name__)
 
@@ -23,6 +24,17 @@ def init_users(app, db):
         except DuplicateKeyError:
             return jsonify({"error": "email already exists"}), 409
         created = db.users.find_one({"_id": res.inserted_id})
+        
+        try:
+            user_id = str(created['_id'])
+            user_type = created.get('userType', 'user')
+            execute_cypher(
+                "MERGE (u:User {id: $id}) SET u.userType = $userType",
+                {"id": user_id, "userType": user_type}
+            )
+        except Exception as e:
+            print(f"Neo4j sync error: {e}")
+        
         return jsonify(serialize(created)), 201
 
     @users.get("/users")

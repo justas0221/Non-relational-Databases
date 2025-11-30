@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify
 from datetime import datetime, timezone
 from cassandra_connection import execute_cql, query_cql
+from neo4j_connection import execute_cypher
 import uuid
 
 event_views_bp = Blueprint('event_views', __name__)
@@ -11,7 +12,7 @@ def track_event_view(user_id, event_id, event_title=None, view_type='detail'):
         view_time = datetime.now(timezone.utc).isoformat()
         view_id = str(uuid.uuid1())
         
-        # Batch detail record inserts (regular inserts)
+        # Batch detail record inserts
         batch_cql = f"""BEGIN BATCH
             INSERT INTO ticket_marketplace.event_view_by_user 
             (user_id, view_time, view_id, event_id, event_title, view_type)
@@ -23,7 +24,6 @@ def track_event_view(user_id, event_id, event_title=None, view_type='detail'):
             USING TTL 2592000;
             APPLY BATCH;"""
         
-        # Counter update must be separate
         counter_cql = f"""UPDATE ticket_marketplace.event_view_counter 
             SET view_count = view_count + 1 
             WHERE event_id = '{event_id}';"""
@@ -31,6 +31,18 @@ def track_event_view(user_id, event_id, event_title=None, view_type='detail'):
         # Execute both async so it doesn't block the HTTP response
         execute_cql(batch_cql, async_mode=True)
         execute_cql(counter_cql, async_mode=True)
+        
+        try:
+            execute_cypher(
+                """
+                MERGE (u:User {id: $userId})
+                MERGE (e:Event {id: $eventId})
+                MERGE (u)-[:VIEWED]->(e)
+                """,
+                {"userId": user_id, "eventId": event_id}
+            )
+        except Exception as neo_err:
+            print(f"Neo4j sync error: {neo_err}")
             
     except Exception as e:
         print(f"Error tracking event view: {e}")
@@ -82,7 +94,7 @@ def get_event_views(event_id):
 def get_event_views_count(event_id):
     """Get view count for a specific event"""
     try:
-        cql = f"SELECT COUNT(*) as view_count FROM ticket_marketplace.event_view_by_event WHERE event_id = '{event_id}';"
+        cql = f"SELECT event_id, view_count FROM ticket_marketplace.event_view_counter WHERE event_id = '{event_id}';"
         rows = query_cql(cql)
         
         count = int(rows[0].get('view_count', 0)) if rows else 0

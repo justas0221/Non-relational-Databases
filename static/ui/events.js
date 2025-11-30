@@ -70,7 +70,8 @@ document.addEventListener('DOMContentLoaded', () => {
           minute: '2-digit',
           hour12: true
         });
-        c.innerHTML = `<h3>${escapeHtml(ev.title || 'Untitled')}</h3>
+        const categoryBadge = ev.category ? `<span style="display:inline-block;background:#6c757d;color:#fff;font-size:11px;padding:3px 8px;border-radius:12px;margin-left:8px;">${escapeHtml(ev.category)}</span>` : '';
+        c.innerHTML = `<h3>${escapeHtml(ev.title || 'Untitled')}${categoryBadge}</h3>
                        <div class="meta">${eventDate}</div>
                        <div style="margin-top:8px">
                          <a href="/ui/event?eventId=${encodeURIComponent(ev._id)}" class="btn primary">View & Buy tickets</a>
