@@ -103,7 +103,27 @@ def init_orders(db):
         }
         res = db.orders.insert_one(order)
         created = db.orders.find_one({"_id": res.inserted_id})
-        _push_order_to_neo4j(created, tickets)
+        
+        try:
+            from neo4j_connection import execute_cypher
+            user_id = str(_user)
+            for item in items:
+                ticket_id = item.get('ticketId')
+                if ticket_id:
+                    ticket = db.tickets.find_one({'_id': ticket_id}, {'eventId': 1})
+                    if ticket and ticket.get('eventId'):
+                        event_id = str(ticket['eventId'])
+                        execute_cypher(
+                            """
+                            MERGE (u:User {id: $userId})
+                            MERGE (e:Event {id: $eventId})
+                            MERGE (u)-[:BOUGHT]->(e)
+                            """,
+                            {"userId": user_id, "eventId": event_id}
+                        )
+        except Exception as e:
+            print(f"Neo4j sync error: {e}")
+        
         return True, {"order": created}
     
     @orders.post("/orders")
@@ -191,6 +211,7 @@ def init_orders(db):
         )
         if not res:
             return jsonify({"error":"order not pending or not found"}), 409
+        
         CacheInvalidator.invalidate_order_related()
         return jsonify(serialize(res))
 

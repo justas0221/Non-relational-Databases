@@ -26,6 +26,7 @@ def init_events(app, db):
         title = (data.get('title') or '').strip()
         event_date_str = data.get('eventDate')
         venue_id = data.get('venueId')
+        category = data.get('category')
         description = (data.get('description') or '').strip()
         
         if not title:
@@ -34,6 +35,12 @@ def init_events(app, db):
             return jsonify({"error": "eventDate is required"}), 400
         if not venue_id:
             return jsonify({"error": "venueId is required"}), 400
+        if not category:
+            return jsonify({"error": "category is required"}), 400
+        
+        allowed_categories = ["Koncertai", "Sportas", "Teatras", "Komedija", "Festivalis"]
+        if category not in allowed_categories:
+            return jsonify({"error": "invalid category"}), 400
         
         try:
             event_date = datetime.fromisoformat(event_date_str.replace('Z', '+00:00'))
@@ -52,7 +59,8 @@ def init_events(app, db):
             "title": title,
             "eventDate": event_date,
             "venueId": venue_oid,
-            "organizerId": organizer_id
+            "organizerId": organizer_id,
+            "category": category
         }
         
         if description:
@@ -99,6 +107,32 @@ def init_events(app, db):
         except Exception as ticket_err:
             print(f"Error creating tickets: {ticket_err}")
             pass
+
+        # Sync to Neo4j
+        try:
+            from neo4j_connection import execute_cypher
+            event_id = str(created_event['_id'])
+            title = created_event.get('title', 'Untitled')
+            category = created_event.get('category')
+            venue_id = str(created_event['venueId']) if created_event.get('venueId') else None
+            event_date = created_event.get('eventDate').isoformat() if created_event.get('eventDate') else None
+            
+            execute_cypher(
+                "MERGE (e:Event {id: $id}) SET e.title = $title, e.category = $category, e.venueId = $venueId, e.eventDate = $eventDate",
+                {"id": event_id, "title": title, "category": category, "venueId": venue_id, "eventDate": event_date}
+            )
+            
+            if category:
+                execute_cypher(
+                    """
+                    MERGE (c:Category {name: $category})
+                    MERGE (e:Event {id: $eventId})
+                    MERGE (e)-[:HAS_CATEGORY]->(c)
+                    """,
+                    {"category": category, "eventId": event_id}
+                )
+        except Exception as e:
+            print(f"Neo4j sync error: {e}")
 
         # Invalidate analytics cache - new event affects availability stats
         CacheInvalidator.invalidate_order_related()

@@ -98,7 +98,8 @@ document.addEventListener('DOMContentLoaded', () => {
         return; 
       }
       
-      titleEl.textContent = ev.title || 'Event';
+      const categoryBadge = ev.category ? `<span style="display:inline-block;background:#6c757d;color:#fff;font-size:13px;padding:4px 10px;border-radius:12px;margin-left:10px;">${escapeHtml(ev.category)}</span>` : '';
+      titleEl.innerHTML = `${escapeHtml(ev.title || 'Event')}${categoryBadge}`;
       const when = ev.eventDate ? new Date(ev.eventDate).toLocaleString('en-US', {
         weekday: 'long',
         year: 'numeric',
