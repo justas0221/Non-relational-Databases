@@ -27,6 +27,10 @@ def query_cypher(query, parameters=None):
         result = session.run(query, parameters or {})
         return [dict(record) for record in result]
 
+def run_cypher(query, parameters=None):
+    """Backward-compatible helper that returns result rows as list of dicts."""
+    return query_cypher(query, parameters)
+
 def close_driver():
     """Close the Neo4j driver connection"""
     driver.close()
