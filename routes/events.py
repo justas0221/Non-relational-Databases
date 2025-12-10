@@ -4,6 +4,7 @@ from bson.int64 import Int64
 from .utils import oid, serialize, parse_int, organizer_required
 from redis_cache import CacheInvalidator
 from routes.event_views import track_event_view
+from elasticsearch_connection import index_document
 
 events = Blueprint('events', __name__)
 
@@ -134,7 +135,24 @@ def init_events(app, db):
         except Exception as e:
             print(f"Neo4j sync error: {e}")
 
-        # Invalidate analytics cache - new event affects availability stats
+        # Sync to Elasticsearch
+        try:
+            venue = db.venues.find_one({"_id": created_event['venueId']})
+            es_doc = {
+                "id": str(created_event['_id']),
+                "title": created_event.get('title'),
+                "category": created_event.get('category'),
+                "event_date": created_event.get('eventDate').isoformat() if created_event.get('eventDate') else None,
+                "venue_name": venue.get('name') if venue else None,
+                "venue_city": venue.get('city') if venue else None,
+                "venue_address": venue.get('address') if venue else None,
+                "description": created_event.get('description')
+            }
+            index_document('events', str(created_event['_id']), es_doc)
+        except Exception as e:
+            print(f"Elasticsearch sync error: {e}")
+
+        # Invalidate analytics cache
         CacheInvalidator.invalidate_order_related()
 
         return jsonify(serialize(created_event)), 201

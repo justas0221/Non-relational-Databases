@@ -13,6 +13,7 @@ from routes.debug import init_debug
 from routes.cart_activity import cart_activity_bp
 from routes.event_views import event_views_bp
 from routes.recommendations import init_recommendations
+from routes.search import search_bp
 
 load_dotenv()
 
@@ -54,6 +55,7 @@ app.register_blueprint(debug_bp)
 app.register_blueprint(cart_activity_bp)
 app.register_blueprint(event_views_bp)
 app.register_blueprint(recommendations_bp)
+app.register_blueprint(search_bp)
 
 if __name__ == "__main__":
     app.run(debug=True, use_reloader=False)
