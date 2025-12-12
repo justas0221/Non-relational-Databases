@@ -16,7 +16,10 @@
         </div>
       </div>
       <div class="searchbar">
-        <input id="q" placeholder="Search events..." />
+        <div class="search-input-wrapper">
+          <input id="q" placeholder="Search events..." autocomplete="off" />
+          <div id="autocompleteList" class="autocomplete-list"></div>
+        </div>
         <button id="searchBtn" class="btn primary">Search</button>
         <div id="authBox" style="margin-left:16px;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)">
           <a href="/ui/cart" class="btn secondary" style="padding:4px 10px;font-size:12px;text-decoration:none">Cart</a>

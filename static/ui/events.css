@@ -65,12 +65,60 @@ body{
   gap:8px;
   align-items:center;
 }
+.search-input-wrapper{
+  position:relative;
+  flex:1;
+  min-width:260px;
+}
 .searchbar input{
   padding:10px 12px;
   border-radius:999px;
   border:1px solid #e6e9ef;
   min-width:260px;
   outline:none;
+}
+.autocomplete-list{
+  position:absolute;
+  top:calc(100% + 4px);
+  left:0;
+  right:0;
+  background:#fff;
+  border:1px solid #e6e9ef;
+  border-radius:0;
+  box-shadow:0 12px 30px rgba(15,23,42,0.12);
+  padding:0;
+  display:none;
+  max-height:260px;
+  overflow-y:auto;
+  z-index:20;
+}
+.autocomplete-list.visible{display:block;}
+.autocomplete-item{
+  width:100%;
+  padding:12px 14px;
+  background:#fff;
+  border:none;
+  border-radius:0;
+  text-align:left;
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  cursor:pointer;
+  font-size:14px;
+  transition:background 0.15s ease;
+}
+.autocomplete-item + .autocomplete-item{
+  border-top:1px solid #eef2f7;
+}
+.autocomplete-item:hover,
+.autocomplete-item.active{
+  background:#f3f7ff;
+}
+.autocomplete-item-type{
+  font-size:11px;
+  color:var(--muted);
+  text-transform:uppercase;
+  letter-spacing:0.06em;
 }
 .searchbar button{
   padding:10px 14px;
@@ -271,6 +319,7 @@ body{
 
 @media (max-width:600px){
   .searchbar input{min-width:120px}
+  .search-input-wrapper{min-width:120px;width:100%;}
   .card{padding:12px}
   .title{font-size:16px}
   .logo{width:36px;height:36px;font-size:16px}
