@@ -28,6 +28,36 @@
 
     <main id="content">
       <div id="events" class="grid"></div>
+      <section id="neo4jRecommendations" class="card" style="margin-top:20px">
+        <div style="display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap">
+          <div>
+            <h2 style="margin:0">Neo4j Recommendations</h2>
+            <p class="meta" style="margin:4px 0 0;font-size:12px;color:var(--muted)">Graph-powered suggestions tailored to you</p>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <label for="neo4jSource" style="font-size:12px;color:var(--muted)">Source</label>
+            <select id="neo4jSource" style="min-width:160px;padding:6px 10px;border-radius:8px;border:1px solid #d9d9d9;font-size:13px">
+              <option value="user" selected>Similar fans</option>
+              <option value="nearby">Same venues</option>
+              <option value="deep">Deep graph paths</option>
+            </select>
+            <button id="neo4jRefresh" class="btn secondary">Refresh</button>
+          </div>
+        </div>
+        <div id="neo4jStatus" class="meta" style="margin:12px 0;font-size:12px;color:var(--muted)">Sign in to view Neo4j suggestions.</div>
+        <div id="neo4jRecList" class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px"></div>
+      </section>
+
+      <div id="neo4jExplain" class="card" style="margin-top:12px;display:none">
+        <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <div>
+            <h3 id="neo4jExplainTitle" style="margin:0">Recommendation insight</h3>
+            <p class="meta" style="margin:4px 0 0;font-size:12px;color:var(--muted)">Shortest path between you and the event</p>
+          </div>
+          <button id="neo4jExplainClose" class="btn secondary">Close</button>
+        </div>
+        <div id="neo4jExplainBody" style="margin-top:12px;font-size:13px;line-height:1.4"></div>
+      </div>
       <div class="footer">Simple demo UI</div>
     </main>
   </div>
